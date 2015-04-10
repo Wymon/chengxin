@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:mvc="http://www.springframework.org/schema/mvc"
+	xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+	<!-- 配置Spring扫描的Action类 -->
+
+	<context:component-scan base-package="xx.tream.chengxin.ms.action" />
+	
+	
+	<!-- 默认通用的标注方式  缺点:不可以使用自己的拦截器  优点:不需要手动配置-->
+	<!-- <mvc:annotation-driven /> -->
+	<!-- 自己手动配置标注的方式 优点:可以配置自己定义的拦截器,缺点:配置过多 -->
+	<bean  class="org.springframework.web.servlet.mvc.annotation.DefaultAnnotationHandlerMapping"></bean>
+	<bean  class="org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerAdapter"></bean>
+	<!-- 字符编码转换 -->
+	<bean id="multipartResolver"
+		class="org.springframework.web.multipart.commons.CommonsMultipartResolver"
+		p:defaultEncoding="UTF-8" />
+	<!-- 视图的默认后缀 -->
+	<bean class="org.springframework.web.servlet.view.InternalResourceViewResolver" 
+		p:prefix="/WEB-INF/pages/" p:suffix=".jsp" />
+
+	<!-- 前期未加入权限的时候可以注释掉这个拦截器;-->
+	<mvc:interceptors>
+		<bean class="xx.tream.chengxin.ms.interceptor.LoginInterceptor"></bean>
+	</mvc:interceptors>
+	 
+</beans>

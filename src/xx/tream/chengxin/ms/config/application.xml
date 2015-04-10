@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+ 
+
+	<context:annotation-config/> 
+	<context:component-scan base-package="xx.tream.chengxin.ms.service" />
+	<context:component-scan base-package="xx.tream.basepaltform.service" />
+	<context:component-scan base-package="xx.tream.chengxin.ms" />
+	<context:component-scan base-package="xx.tream.chengxin.ms.task" />
+	
+ <!-- 以下为读写分离操作 -->
+	<bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="locations">
+			<list>
+				<value>classpath:xx/tream/chengxin/ms/config/jdbc.properties</value>
+			</list>
+		</property>
+	</bean>
+	
+	<bean id="daoUtil" class="xx.tream.basepaltform.dao.DaoUtil">
+		<property name="dataSource" ref="dataSource1"></property>
+	</bean>
+	<bean id="parentDataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<!-- 指定连接数据库连接池的最大连接数  -->
+		<property name="maxPoolSize" value="100" />
+		 <!-- 指定连接数据库连接池的最小连接数  -->
+		<property name="minPoolSize" value="5" />
+		<!--  指定连接数据库连接池的初始化连接数  -->
+		<property name="initialPoolSize" value="1" />
+		<!--  指定连接数据库连接池的连接的最大空闲时间  -->
+		<property name="maxIdleTime" value="20" />
+	</bean>
+	<bean id="masterDataSource" parent="parentDataSource">
+		<property name="driverClass" value="${master.jdbc.driverClassName}"></property>
+		<property name="jdbcUrl" value="${master.jdbc.url}"></property>
+		<property name="user" value="${master.jdbc.username}"></property>
+		<property name="password" value="${master.jdbc.password}"></property>
+	</bean>
+	<bean id="slaveDataSource" parent="parentDataSource">
+		<property name="driverClass" value="${slave.jdbc.driverClassName}"></property>
+		<property name="jdbcUrl" value="${slave.jdbc.url}"></property>
+		<property name="user" value="${slave.jdbc.username}"></property>
+		<property name="password" value="${slave.jdbc.password}"></property>
+	</bean>
+	<bean id="dataSource1" class="xx.tream.basepaltform.util.db.DynamicDataSourceUtil">
+		<property name="targetDataSources">
+			<map key-type="java.lang.String">
+				<entry key="slave" value-ref="slaveDataSource"></entry>
+			</map>
+		</property>
+		<property name="defaultTargetDataSource" ref="masterDataSource"></property>
+	</bean>
+	<bean id="dataSourceAdvice" class="xx.tream.basepaltform.util.db.DataSourceAdviceUtil"></bean> 
+	<!-- 强制使用CGLIB生成代理 主要是字符编码方面 -->
+	<aop:aspectj-autoproxy proxy-target-class="true" /> 
+	<!-- 配置事务管理器 -->
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource1" />
+	</bean> 
+	<!-- 配置事务的传播特性 -->
+	<!-- --><tx:advice id="txAdvice" transaction-manager="transactionManager">
+		<tx:attributes>
+			<tx:method name="save*" propagation="REQUIRED" />
+			<tx:method name="add*" propagation="REQUIRED" />
+			<tx:method name="del*" propagation="REQUIRED" />
+			<tx:method name="update*" propagation="REQUIRED" />
+			<tx:method name="*" read-only="true" />
+		</tx:attributes>
+	</tx:advice> 
+	<!-- 设置参与事务的类和方法 同时记录异常 -->
+	 <aop:config>
+		<aop:pointcut id="allManagerMethod" expression="execution(* xx.tream.chengxin.ms.action.*.*(..))" />
+		<aop:advisor pointcut-ref="allManagerMethod" advice-ref="txAdvice" />
+	</aop:config>
+	
+	
+	<!--定义定时任务类--> 
+	<bean id="statisticsTask" class="xx.tream.chengxin.ms.task.StatisticsTask"/> 
+    
+    
+	<!-- 线程执行器配置，用于任务注册 -->
+	<bean id="executor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+	 	<property name="corePoolSize" value="10" />
+		<property name="maxPoolSize" value="100" />
+	 	<property name="queueCapacity" value="500" />
+	</bean>
+	<!-- 调度业务 -->
+	<bean id="jobDetail" class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+	 	<property name="targetObject" ref="statisticsTask" />
+	 	<property name="targetMethod" value="service" />
+	</bean>
+	<bean id="cronTrigger" class="org.springframework.scheduling.quartz.CronTriggerBean">
+	 	<property name="jobDetail" ref="jobDetail" />
+	 	<!-- 0 10 17 * * ?   表示每天下午17:10执行 -->
+	 	<property name="cronExpression" value="00 03 15 * * ?" />
+	</bean>
+	<!-- 设置调度 -->
+	<bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+		 <property name="triggers">
+		  <list>
+		   <ref bean="cronTrigger" />
+		  </list>
+		 </property>
+		 <property name="taskExecutor" ref="executor" />
+	</bean>
+</beans>
